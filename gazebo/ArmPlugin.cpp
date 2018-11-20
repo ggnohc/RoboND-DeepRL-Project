@@ -263,11 +263,25 @@ void ArmPlugin::onCollisionMsg(ConstContactsPtr &contacts)
 			     << "] and [" << contacts->contact(i).collision2() << "]\n";}
 
 
-		/*
-		/ TODO - Check if there is collision between the arm and object, then issue learning reward
-		/
-		*/
+		// TODO - Check if there is collision between the arm and object, then issue learning reward
 
+    bool armCollisionCheck =
+        (strcmp(contacts->contact(i).collision2().c_str(), COLLISION_ARM) == 0);
+    bool gripperCollisionCheck =
+        (contacts->contact(i).collision2().find("arm::gripper") != std::string::npos);
+
+
+    if (gripperCollisionCheck) {
+        rewardHistory = REWARD_WIN * 3000.0f;
+        newReward  = true;
+        endEpisode = true;
+
+    } else if (armCollisionCheck) {
+        rewardHistory = REWARD_LOSS * 2000.0f;
+        newReward  = true;
+        endEpisode = true;
+
+    }
 		/*
 
 		if (collisionCheck)
@@ -323,12 +337,12 @@ bool ArmPlugin::updateAgent()
 	// if the action is odd,  decrease the joint position by the delta parameter
 
 
-	/*
-	/ TODO - Increase or decrease the joint velocity based on whether the action is even or odd
-	/
-	*/
+	// TODO - Increase or decrease the joint velocity based on whether the action is even or odd
+  float direction = (action % 2 == 0) ? 1.0f : -1.0f;
 
-	float velocity = 0.0; // TODO - Set joint velocity based on whether action is even or odd.
+	// float velocity = 0.0;
+  // TODO - Set joint velocity based on whether action is even or odd.
+  float velocity = vel[action / 2] + actionVelDelta * direction;
 
 	if( velocity < VELOCITY_MIN )
 		velocity = VELOCITY_MIN;
@@ -355,11 +369,11 @@ bool ArmPlugin::updateAgent()
 	}
 #else
 
-	/*
-	/ TODO - Increase or decrease the joint position based on whether the action is even or odd
-	/
-	*/
-	float joint = 0.0; // TODO - Set joint position based on whether action is even or odd.
+	// TODO - Increase or decrease the joint position based on whether the action is even or odd
+  float direction = (action % 2 == 0) ? 1.0f : -1.0f;
+
+  // float joint = 0.0; // TODO - Set joint position based on whether action is even or odd.
+  float joint = ref[action / 2] + actionJointDelta * direction;
 
 	// limit the joint to the specified range
 	if( joint < JOINT_MIN )
