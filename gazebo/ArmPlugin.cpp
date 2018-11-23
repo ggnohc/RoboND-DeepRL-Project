@@ -592,10 +592,31 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
 		const math::Box& gripBBox = gripper->GetBoundingBox();
 		const float groundContact = 0.05f;
 
-		/*
-		/ TODO - set appropriate Reward for robot hitting the ground.
-		/
-		*/
+		// TODO - set appropriate Reward for robot hitting the ground.
+
+		const float distGoal = BoxDistance(gripBBox, propBBox); //distance to the goal
+
+		bool checkGroundContact = ( gripBBox.min.z <= groundContact || gripBBox.max.z <= groundContact );
+		bool checkGroundContactArm = ( midBBox.min.z <= groundContact || midBBox.max.z <= groundContact );
+
+		if(checkGroundContact)
+		{
+
+				if(DEBUG) {
+						printf("GROUND CONTACT, EOE\n");
+				}
+
+				rewardHistory = REWARD_LOSS * distGoal * 2000.0f;
+				newReward     = true;
+				endEpisode    = true;
+		}
+
+		if (checkGroundContactArm)
+		{
+				rewardHistory = REWARD_LOSS * 2000.0f;
+				newReward     = true;
+				endEpisode    = true;
+		}
 
 
 		/*if(checkGroundContact)
@@ -609,11 +630,34 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
 		}
 		*/
 
-		/*
-		/ TODO - Issue an interim reward based on the distance to the object
-		/
-		*/
+		// TODO - Issue an interim reward based on the distance to the object
+		if(!checkGroundContact && !checkGroundContactArm)
+		{
 
+				if(DEBUG) {
+						printf("distance('%s', '%s') = %f\n",
+										gripper->GetName().c_str(), prop->model->GetName().c_str(), distGoal);
+				}
+
+
+				if( episodeFrames > 1 )
+				{
+					const float distDelta  = lastGoalDistance - distGoal; // (-1...1)
+					const float weightedDelta = distDelta * ( 1.0f - REWARD_ALPHA);
+
+					const float weightedHist = avgGoalDelta * REWARD_ALPHA;
+					const float goalReward = weightedDelta + weightedHist;
+					const float scaledReward = goalReward; //* 20.0f;
+					avgGoalDelta = goalReward;
+					rewardHistory = scaledReward;
+					newReward     = true;
+					std::cerr << "reward: " << scaledReward << " delta: " << distDelta << " wD " <<  weightedDelta << " wH " << weightedHist << std::endl;
+				}
+
+				totalrewards = totalrewards + rewardHistory;
+				lastGoalDistance = distGoal;
+		}
+}
 		/*
 		if(!checkGroundContact)
 		{
