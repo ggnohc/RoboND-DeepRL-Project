@@ -68,6 +68,7 @@ private:
 	bool     newReward;			// true if a new reward's been issued
 	bool     endEpisode;		// true if this episode is over
 	float    rewardHistory;		// value of the last reward issued
+	float    totalrewards; 		// value of the totalrewards
 	Tensor*  inputState;		// pyTorch input object to the agent
 	void*    inputBuffer[2];		// [0] for CPU and [1] for GPU
 	size_t   inputBufferSize;
