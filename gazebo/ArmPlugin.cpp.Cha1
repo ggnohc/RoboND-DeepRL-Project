@@ -17,8 +17,8 @@
 
 // Turn on velocity based control
 #define VELOCITY_CONTROL true
-#define VELOCITY_MIN -0.2f
-#define VELOCITY_MAX  0.2f
+#define VELOCITY_MIN -0.1f
+#define VELOCITY_MAX  0.1f
 
 // Define DQN API Settings
 
@@ -35,11 +35,11 @@
 #define INPUT_WIDTH   64
 #define INPUT_HEIGHT  64
 #define OPTIMIZER "Adam"
-#define LEARNING_RATE 0.2f
+#define LEARNING_RATE 0.02f
 #define REPLAY_MEMORY 10000
-#define BATCH_SIZE 32
+#define BATCH_SIZE 64
 #define USE_LSTM true
-#define LSTM_SIZE 32
+#define LSTM_SIZE 256
 
 // TODO - Define Reward Parameters
 
@@ -101,7 +101,7 @@ ArmPlugin::ArmPlugin() : ModelPlugin(), cameraNode(new gazebo::transport::Node()
     inputRawWidth    = 0;
     inputRawHeight   = 0;
     actionJointDelta = 0.15f;
-    actionVelDelta   = 0.05f;
+    actionVelDelta   = 0.1f;
     maxEpisodeLength = 100;
     episodeFrames    = 0;
 
@@ -164,7 +164,8 @@ bool ArmPlugin::createAgent()
 
     // TODO - Create DQN Agent
 
-    agent = dqnAgent::Create(INPUT_WIDTH, INPUT_HEIGHT, INPUT_CHANNELS, DOF*2,
+    uint32_t numActions = DOF * 2;
+    agent = dqnAgent::Create(INPUT_WIDTH, INPUT_HEIGHT, INPUT_CHANNELS, numActions,
                              OPTIMIZER, LEARNING_RATE, REPLAY_MEMORY, BATCH_SIZE,
                              GAMMA, EPS_START, EPS_END, EPS_DECAY,
                              USE_LSTM, LSTM_SIZE, ALLOW_RANDOM, DEBUG);
@@ -266,9 +267,9 @@ void ArmPlugin::onCollisionMsg(ConstContactsPtr &contacts)
 
 
         // TODO - Check if there is collision between the arm and object, then issue learning reward - REWARD
-        bool armCollisionCheck =
+        bool armCollisionCheck = 
             (strcmp(contacts->contact(i).collision2().c_str(), COLLISION_ARM) == 0);
-        bool gripperCollisionCheck =
+        bool gripperCollisionCheck = 
             (contacts->contact(i).collision2().find("arm::gripper") != std::string::npos);
 
 
@@ -276,12 +277,14 @@ void ArmPlugin::onCollisionMsg(ConstContactsPtr &contacts)
             rewardHistory = REWARD_WIN * 3000.0f;
             newReward  = true;
             endEpisode = true;
+            printf("gripper collision with target, rewardHistory:%f\n",rewardHistory);
 
         } else if (armCollisionCheck) {
-            rewardHistory = REWARD_LOSS * 2000.0f;
+            rewardHistory = REWARD_WIN * 3000.0f;
             newReward  = true;
             endEpisode = true;
 
+            printf("arm collision with target, rewardHistory:%f\n",rewardHistory);
         }
 
 
@@ -366,7 +369,7 @@ bool ArmPlugin::updateAgent()
     float direction = (action % 2 == 0) ? 1.0f : -1.0f;
 
     // TODO - Set joint position based on whether action is even or odd.
-    float joint = ref[action / 2] + actionJointDelta * direction;
+    float joint = ref[action / 2] + actionJointDelta * direction; 
 
     // limit the joint to the specified range
     if( joint < JOINT_MIN )
@@ -553,7 +556,7 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
     {
         printf("[ArmPlugin] %i frames, End of Episode\n", maxEpisodeLength);
         // negative reward to keep arm from avoiding collisions
-        rewardHistory = REWARD_LOSS * 2000.0f;
+        rewardHistory = REWARD_LOSS * 3000.0f;
         newReward     = true;
         endEpisode    = true;
     }
@@ -598,15 +601,17 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
             if(DEBUG) {
                 printf("GROUND CONTACT, EOE\n");
             }
-
-            rewardHistory = REWARD_LOSS * distGoal * 2000.0f;
+    
+            //rewardHistory = REWARD_LOSS * distGoal * 5000.0f;
+            rewardHistory = REWARD_LOSS * distGoal * 3000.0f;  //GC
             newReward     = true;
             endEpisode    = true;
         }
 
 	if (checkGroundContactArm)
         {
-            rewardHistory = REWARD_LOSS * 2000.0f;
+            //rewardHistory = REWARD_LOSS * 5000.0f;
+            rewardHistory = REWARD_LOSS * 3000.0f;
             newReward     = true;
             endEpisode    = true;
         }
@@ -624,16 +629,16 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
 
             if( episodeFrames > 1 )
             {
-		const float distDelta  = lastGoalDistance - distGoal; // (-1...1)
+		const float distDelta  = lastGoalDistance - distGoal; // (-1...1)		
 		const float weightedDelta = distDelta * ( 1.0f - REWARD_ALPHA);
 
 		const float weightedHist = avgGoalDelta * REWARD_ALPHA;
                 const float goalReward = weightedDelta + weightedHist;
-                const float scaledReward = goalReward; //* 20.0f;
+                const float scaledReward = goalReward * 25.0f;
                 avgGoalDelta = goalReward;
                 rewardHistory = scaledReward;
                 newReward     = true;
-                std::cerr << "reward: " << scaledReward << " delta: " << distDelta << " wD " <<  weightedDelta << " wH " << weightedHist << std::endl;
+                std::cerr << "reward: " << scaledReward << " delta: " << distDelta << " wD " <<  weightedDelta << " wH " << weightedHist << std::endl;          
             }
 
                 totalrewards = totalrewards + rewardHistory;
@@ -647,8 +652,8 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
         if(DEBUG) {
             printf("ArmPlugin - issuing reward %f, EOE=%s  %s\n",
                     rewardHistory, endEpisode ? "true" : "false",
-                    (rewardHistory > 0.1f) ? "POS+" :(rewardHistory > 0.0f)
-                    ? "POS" : (rewardHistory < 0.0f)
+                    (rewardHistory > 0.1f) ? "POS+" :(rewardHistory > 0.0f) 
+                    ? "POS" : (rewardHistory < 0.0f) 
                     ? "    NEG" : "       ZERO");
         }
         agent->NextReward(rewardHistory, endEpisode);
@@ -671,7 +676,7 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
                 successfulGrabs++;
 
             totalRuns++;
-            printf("Current Accuracy:  %0.4f (%03u of %03u)  (reward=%+0.2f %s, AccumulatedReward=%+0.2f)\n",
+            printf("Current Accuracy:  %0.4f (%03u of %03u)  (reward=%+0.2f %s, accumulatedReward=%+0.2f)\n",
                     float(successfulGrabs)/float(totalRuns),
                     successfulGrabs,
                     totalRuns,
@@ -680,6 +685,13 @@ void ArmPlugin::OnUpdate(const common::UpdateInfo& updateInfo)
 	            totalrewards);
 
 	    totalrewards     = 0.0f;
+/*            printf("Total: %f, gripperColl: %0.4f, armColl: %0.4f, floorColl: %0.4f, noColl: %04f\n",
+                    float((successfulGrabs + nArmTargetCollision + nfloorCollision + nNoCollision) / totalRuns),
+                    float(successfulGrabs)/float(totalRuns),
+                    float(nArmTargetCollision)/float(totalRuns),
+                    float(nfloorCollision)/float(totalRuns),
+                    float(nNoCollision)/float(totalRuns));
+*/
             for( uint32_t n=0; n < DOF; n++ )
                 vel[n] = 0.0f;
         }
